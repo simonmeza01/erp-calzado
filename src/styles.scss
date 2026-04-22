@@ -1,0 +1,52 @@
+// Angular Material prebuilt theme
+@use '@angular/material' as mat;
+@include mat.core();
+
+$theme: mat.define-theme((
+  color: (
+    theme-type: light,
+    primary: mat.$azure-palette,
+  ),
+  density: (scale: 0),
+));
+
+:root {
+  @include mat.all-component-themes($theme);
+}
+
+// Tailwind
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// Global resets
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, Roboto, 'Helvetica Neue', sans-serif;
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+// Utility classes for primary colors (used by Material overrides)
+.bg-primary { background-color: #1E3A5F !important; }
+.text-primary { color: #1E3A5F !important; }
+
+// Router link active state inside nav
+.nav-link-active {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  font-weight: 600;
+}
+
+// Skeleton animation
+@keyframes shimmer {
+  0%   { background-position: -468px 0; }
+  100% { background-position: 468px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(to right, #e2e8f0 8%, #cbd5e1 18%, #e2e8f0 33%);
+  background-size: 936px 104px;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+}
