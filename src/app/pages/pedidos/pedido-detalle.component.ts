@@ -149,10 +149,37 @@ const ORDEN_STATUS: Record<PedidoStatus, number> = {
                     <span class="font-mono text-xs text-slate-700">{{ p.numero_guia }}</span>
                   </div>
                 }
-                @if (p.tiene_factura) {
+                @if (p.factura_fiscal) {
                   <div class="flex justify-between">
-                    <span class="text-slate-500">Factura</span>
-                    <span class="font-mono text-xs text-slate-700">{{ p.numero_factura }}</span>
+                    <span class="text-slate-500">Factura fiscal</span>
+                    <span class="font-mono text-xs text-slate-700">{{ p.factura_fiscal.numero_factura }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-slate-500">IVA</span>
+                    <span class="text-slate-700">
+                      {{ p.factura_fiscal.tiene_iva ? p.factura_fiscal.porcentaje_iva + '%' : 'Sin IVA' }}
+                    </span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-slate-500">Total factura</span>
+                    <span class="font-semibold text-slate-800">{{ bcv.formatUsd(p.factura_fiscal.monto_total_factura_usd) }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-slate-500">Estado factura</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full capitalize
+                                 {{ p.factura_fiscal.status_pago === 'pagada' ? 'bg-emerald-100 text-emerald-700' :
+                                    p.factura_fiscal.status_pago === 'anulada' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700' }}">
+                      {{ p.factura_fiscal.status_pago }}
+                    </span>
+                  </div>
+                }
+                @if (p.fecha_culminacion_pago) {
+                  <div class="flex justify-between">
+                    <span class="text-slate-500">Pago completado</span>
+                    <span class="text-emerald-600 font-semibold">
+                      {{ p.fecha_culminacion_pago | date:'dd/MM/yyyy' }}
+                    </span>
                   </div>
                 }
                 @if (p.descuento_porcentaje > 0) {
@@ -282,7 +309,15 @@ const ORDEN_STATUS: Record<PedidoStatus, number> = {
                         {{ pago.moneda === 'usd' ? 'attach_money' : 'currency_exchange' }}
                       </mat-icon>
                       <div class="flex-1">
-                        <p class="text-sm font-medium text-slate-700">{{ pago.banco_destino }}</p>
+                        <p class="text-sm font-medium text-slate-700">
+                        {{ pago.cuenta_bancaria?.banco ?? '—' }}
+                        @if (pago.cuenta_bancaria?.tipo) {
+                          <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full
+                                       {{ pago.cuenta_bancaria!.tipo === 'juridica' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700' }}">
+                            {{ pago.cuenta_bancaria!.tipo === 'juridica' ? 'Empresa' : 'Personal' }}
+                          </span>
+                        }
+                      </p>
                         <p class="text-xs text-slate-400">
                           {{ pago.fecha_pago | date:'dd/MM/yyyy' }} ·
                           {{ pago.tipo === 'completo' ? 'Pago completo' : 'Abono' }}
@@ -401,19 +436,22 @@ export class PedidoDetalleComponent implements OnInit {
     });
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
-      this.svc.actualizarPedido(p.id, { status: 'aprobado' }).subscribe(actualizado => {
-        this.pedido.set(actualizado);
-        // Crear comisión automática: 8% sin descuento, 6% con descuento
-        const porcentaje = p.descuento_porcentaje > 0 ? 6 : 8;
-        this.svc.crearComision({
-          pedido_id: p.id,
-          vendedor_id: p.vendedor_id,
-          porcentaje,
-          monto_usd: parseFloat((p.total_usd * porcentaje / 100).toFixed(2)),
-          pagada: false,
-        }).subscribe();
-        this.snack.open(`Pedido aprobado. Comisión ${porcentaje}% generada.`, 'OK', { duration: 4000 });
-      });
+      try {
+        this.svc.cambiarStatusPedido(p.id, 'aprobado', this.auth.usuarioActual()!.rol).subscribe(actualizado => {
+          this.pedido.set(actualizado);
+          const porcentaje = p.descuento_porcentaje > 0 ? 6 : 8;
+          this.svc.crearComision({
+            pedido_id: p.id,
+            vendedor_id: p.vendedor_id,
+            porcentaje,
+            monto_usd: parseFloat((p.total_usd * porcentaje / 100).toFixed(2)),
+            pagada: false,
+          }).subscribe();
+          this.snack.open(`Pedido aprobado. Comisión ${porcentaje}% generada.`, 'OK', { duration: 4000 });
+        });
+      } catch (e: any) {
+        this.snack.open(e.message ?? 'Error al aprobar', 'OK', { duration: 4000 });
+      }
     });
   }
 
@@ -423,18 +461,26 @@ export class PedidoDetalleComponent implements OnInit {
     });
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
-      this.svc.actualizarPedido(id, { status: 'cancelado' }).subscribe(p => {
-        this.pedido.set(p);
-        this.snack.open('Pedido cancelado', 'OK', { duration: 3000 });
-      });
+      try {
+        this.svc.cambiarStatusPedido(id, 'cancelado', this.auth.usuarioActual()!.rol).subscribe(p => {
+          this.pedido.set(p);
+          this.snack.open('Pedido cancelado', 'OK', { duration: 3000 });
+        });
+      } catch (e: any) {
+        this.snack.open(e.message ?? 'Error al cancelar', 'OK', { duration: 4000 });
+      }
     });
   }
 
   avanzarStatus(id: string, nuevoStatus: PedidoStatus): void {
-    this.svc.actualizarPedido(id, { status: nuevoStatus }).subscribe(p => {
-      this.pedido.set(p);
-      this.snack.open('Estado actualizado', 'OK', { duration: 2500 });
-    });
+    try {
+      this.svc.cambiarStatusPedido(id, nuevoStatus, this.auth.usuarioActual()!.rol).subscribe(p => {
+        this.pedido.set(p);
+        this.snack.open('Estado actualizado', 'OK', { duration: 2500 });
+      });
+    } catch (e: any) {
+      this.snack.open(e.message ?? 'Acción no permitida', 'OK', { duration: 4000 });
+    }
   }
 
   registrarPago(p: any): void {

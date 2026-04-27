@@ -35,11 +35,11 @@ const MRP_RECETA: { nombre: string; porPar: number; unidad: string; materialId: 
   template: `
     <div class="space-y-4">
 
-      <mat-tab-group animationDuration="200ms">
+      <mat-tab-group data-tour="compras-tabs" animationDuration="200ms">
 
         <!-- TAB 1: Materiales -->
         <mat-tab label="Materiales">
-          <div class="pt-4 space-y-4">
+          <div data-tour="compras-contenido" class="pt-4 space-y-4">
             <div class="flex items-center justify-between">
               <p class="text-sm text-slate-500">{{ materiales().length }} materias primas</p>
               @if (auth.esAdmin()) {

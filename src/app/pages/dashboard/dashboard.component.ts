@@ -33,7 +33,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
     <div class="space-y-6">
 
       <!-- Filtro mes / año -->
-      <div class="flex items-center gap-3 flex-wrap">
+      <div data-tour="dashboard-filtros" class="flex items-center gap-3 flex-wrap">
         <div class="flex-1">
           <h2 class="text-lg font-bold text-slate-800">Dashboard</h2>
           <p class="text-xs text-slate-500">Panel de control y métricas del negocio</p>
@@ -56,7 +56,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
       </div>
 
       <!-- KPI cards Row 1 -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div data-tour="dashboard-kpis" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         @for (kpi of kpis(); track kpi.label) {
           <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div class="flex items-center justify-between mb-2">
@@ -72,7 +72,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
       </div>
 
       <!-- Row 2: Gráficas -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div data-tour="dashboard-graficos" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         <!-- Bar chart: Ventas 6 meses -->
         <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -108,7 +108,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
       <!-- Row 3: Tablas analíticas -->
 
       <!-- Cuentas por vencer -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div data-tour="dashboard-cuentas-vencer" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
           <mat-icon class="text-red-500">event_busy</mat-icon>
           <h3 class="font-semibold text-slate-800">Cuentas por vencer</h3>
@@ -182,7 +182,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
         </div>
 
         <!-- Vendedores con más deuda -->
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div data-tour="dashboard-vendedores" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
             <mat-icon class="text-orange-500">person_alert</mat-icon>
             <h3 class="font-semibold text-slate-800">Vendedores — deuda pendiente</h3>
@@ -295,7 +295,7 @@ export class DashboardComponent implements OnInit {
       .reduce((s, p) => s + p.total_usd, 0);
 
     const pagadosATiempo = delMes.filter(p =>
-      p.status === 'entregado' && p.factura_pagada &&
+      p.status === 'entregado' && p.factura_fiscal?.status_pago === 'pagada' &&
       (p.dias_para_vencer === undefined || p.dias_para_vencer >= 0)
     ).length;
 
@@ -363,7 +363,7 @@ export class DashboardComponent implements OnInit {
       if (!p.cliente_id) continue;
       const existing = map.get(p.cliente_id);
       const nombre = p.cliente?.razon_social ?? p.cliente_id;
-      const zona = p.cliente?.zona?.nombre ?? '';
+      const zona = p.cliente?.estado ?? '';
       if (existing) {
         existing.totalComprado += p.total_usd;
         existing.numeroPedidos++;

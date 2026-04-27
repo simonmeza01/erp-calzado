@@ -1,10 +1,12 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatDialogModule } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { MockDataService } from '../../core/services/mock-data.service';
 
 @Component({
   selector: 'app-crear-lote-dialog',
@@ -24,6 +26,21 @@ import { MatSelectModule } from '@angular/material/select';
           🟡 PVC
         </button>
       </div>
+
+      <!-- Producto destino (opcional al crear, requerido al completar) -->
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>Producto destino (opcional)</mat-label>
+        <mat-select [(ngModel)]="productoId">
+          <mat-option value="">Sin asignar</mat-option>
+          @for (p of productosActivos(); track p.id) {
+            <mat-option [value]="p.id">
+              <span class="font-medium">{{ p.sku }}</span>
+              <span class="text-slate-500 text-xs ml-2">{{ p.nombre }}</span>
+            </mat-option>
+          }
+        </mat-select>
+        <mat-hint>Puede asignarse al completar el lote</mat-hint>
+      </mat-form-field>
 
       <div class="grid grid-cols-2 gap-3">
         <mat-form-field appearance="outline">
@@ -50,7 +67,7 @@ import { MatSelectModule } from '@angular/material/select';
       <button mat-button [mat-dialog-close]="null">Cancelar</button>
       <button mat-flat-button color="primary"
               [disabled]="!cantidad || cantidad < 1"
-              [mat-dialog-close]="{ tipo: tipo(), fecha_inicio: fechaInicio, fecha_fin: fechaFin, cantidad_planificada: cantidad, notas: notas }">
+              (click)="confirmar()">
         Crear lote
       </button>
     </mat-dialog-actions>
@@ -58,9 +75,28 @@ import { MatSelectModule } from '@angular/material/select';
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
 })
 export class CrearLoteDialogComponent {
+  private readonly ref = inject(MatDialogRef<CrearLoteDialogComponent>);
+  private readonly svc = inject(MockDataService);
+
+  readonly productos = toSignal(this.svc.getProductos(), { initialValue: [] });
+  readonly productosActivos = computed(() => this.productos().filter(p => p.activo));
+
   tipo       = signal<'botas' | 'pvc'>('botas');
+  productoId = '';
   fechaInicio = '';
   fechaFin    = '';
   cantidad    = 0;
   notas       = '';
+
+  confirmar(): void {
+    if (!this.cantidad || this.cantidad < 1) return;
+    this.ref.close({
+      tipo: this.tipo(),
+      producto_id: this.productoId || undefined,
+      fecha_inicio: this.fechaInicio || undefined,
+      fecha_fin: this.fechaFin || undefined,
+      cantidad_planificada: this.cantidad,
+      notas: this.notas || undefined,
+    });
+  }
 }

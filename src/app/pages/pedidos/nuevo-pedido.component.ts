@@ -11,6 +11,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map, startWith } from 'rxjs/operators';
 import { MockDataService } from '../../core/services/mock-data.service';
@@ -18,6 +19,7 @@ import { AuthMockService } from '../../core/services/auth-mock.service';
 import { TasaBcvService } from '../../core/services/tasa-bcv.service';
 import { Producto } from '../../core/models';
 import { TasaBcvChipComponent } from '../../shared/components/tasa-bcv-chip/tasa-bcv-chip.component';
+import { BloqueoClienteDialogComponent } from '../../shared/components/bloqueo-cliente-dialog/bloqueo-cliente-dialog.component';
 
 interface ItemForm { producto: Producto; cantidad: number; precio_unitario_usd: number; descuento: number }
 
@@ -82,28 +84,47 @@ interface ItemForm { producto: Producto; cantidad: number; precio_unitario_usd: 
 
             </div>
 
-            <!-- Tiene factura -->
+            <!-- Factura fiscal -->
             <div class="flex items-center gap-3">
-              <mat-slide-toggle formControlName="tiene_factura" color="primary">
-                Tiene factura
+              <mat-slide-toggle formControlName="tiene_factura_fiscal" color="primary">
+                Agregar Factura Fiscal
               </mat-slide-toggle>
             </div>
 
-            @if (paso1.get('tiene_factura')?.value) {
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                <mat-form-field appearance="outline">
-                  <mat-label>Número de factura</mat-label>
-                  <input matInput formControlName="numero_factura" />
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Tipo de pago factura</mat-label>
-                  <mat-select formControlName="tipo_pago_factura">
-                    <mat-option value="transferencia">Transferencia</mat-option>
-                    <mat-option value="efectivo_usd">Efectivo USD</mat-option>
-                    <mat-option value="efectivo_bs">Efectivo Bs.</mat-option>
-                    <mat-option value="retencion">Retención</mat-option>
-                  </mat-select>
-                </mat-form-field>
+            @if (paso1.get('tiene_factura_fiscal')?.value) {
+              <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Número de factura *</mat-label>
+                    <input matInput formControlName="numero_factura" placeholder="F-2026-0001" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Tipo de pago</mat-label>
+                    <mat-select formControlName="tipo_pago_factura">
+                      <mat-option value="transferencia">Transferencia</mat-option>
+                      <mat-option value="efectivo_usd">Efectivo USD</mat-option>
+                      <mat-option value="efectivo_bs">Efectivo Bs.</mat-option>
+                      <mat-option value="retencion">Retención</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+                <div class="flex items-center gap-3">
+                  <mat-slide-toggle formControlName="tiene_iva" color="accent">
+                    Aplicar IVA ({{ paso1.get('porcentaje_iva')?.value }}%)
+                  </mat-slide-toggle>
+                </div>
+                @if (paso1.get('tiene_iva')?.value) {
+                  <mat-form-field appearance="outline" class="w-40">
+                    <mat-label>% IVA</mat-label>
+                    <input matInput type="number" formControlName="porcentaje_iva" min="0" max="100" />
+                    <span matSuffix>%</span>
+                  </mat-form-field>
+                  <div class="text-sm text-slate-600 bg-white rounded px-3 py-2 border border-slate-200">
+                    Base: <strong>{{ bcv.formatUsd(totalUsd()) }}</strong> +
+                    IVA: <strong>{{ bcv.formatUsd(montoIva()) }}</strong> =
+                    <strong class="text-primary">{{ bcv.formatUsd(totalConIva()) }}</strong>
+                  </div>
+                }
               </div>
             }
 
@@ -113,9 +134,22 @@ interface ItemForm { producto: Producto; cantidad: number; precio_unitario_usd: 
               <textarea matInput formControlName="notas" rows="2"></textarea>
             </mat-form-field>
 
+            <!-- Alerta de bloqueo -->
+            @if (clienteBloqueado()) {
+              <div class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <mat-icon class="text-red-600 mt-0.5 flex-shrink-0">block</mat-icon>
+                <div>
+                  <p class="text-sm font-semibold text-red-700">Cliente bloqueado por pagos vencidos</p>
+                  <p class="text-xs text-red-500 mt-0.5">
+                    Este cliente tiene más de 60 días sin realizar un abono. No se pueden registrar nuevos pedidos.
+                  </p>
+                </div>
+              </div>
+            }
+
             <div class="flex justify-end">
               <button mat-flat-button matStepperNext color="primary"
-                      [disabled]="!paso1.get('cliente_id')?.value">
+                      [disabled]="!paso1.get('cliente_id')?.value || clienteBloqueado()">
                 Siguiente <mat-icon>arrow_forward</mat-icon>
               </button>
             </div>
@@ -345,13 +379,15 @@ export class NuevoPedidoComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route  = inject(ActivatedRoute);
   private readonly snack  = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
   readonly bcv            = inject(TasaBcvService);
 
   readonly hoy = new Date().toISOString().slice(0, 10);
-  readonly guardando          = signal(false);
-  readonly accionSeleccionada = signal<'borrador' | 'en_aprobacion'>('en_aprobacion');
-  readonly items              = signal<ItemForm[]>([]);
+  readonly guardando           = signal(false);
+  readonly accionSeleccionada  = signal<'borrador' | 'en_aprobacion'>('en_aprobacion');
+  readonly items               = signal<ItemForm[]>([]);
   readonly clienteSeleccionado = signal<any>(null);
+  readonly clienteBloqueado    = signal(false);
 
   readonly buscarClienteCtrl  = new FormControl('');
   readonly buscarProductoCtrl = new FormControl('');
@@ -359,14 +395,16 @@ export class NuevoPedidoComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
 
   readonly paso1 = this.fb.nonNullable.group({
-    cliente_id:          ['', Validators.required],
-    fecha_vencimiento:   [''],
-    descuento_porcentaje:[0, [Validators.min(0), Validators.max(100)]],
-    tiene_factura:       [false],
-    numero_factura:      [''],
-    tipo_pago_factura:   [''],
-    numero_guia:         [''],
-    notas:               [''],
+    cliente_id:           ['', Validators.required],
+    fecha_vencimiento:    [''],
+    descuento_porcentaje: [0, [Validators.min(0), Validators.max(100)]],
+    tiene_factura_fiscal: [false],
+    numero_factura:       [''],
+    tipo_pago_factura:    [''],
+    tiene_iva:            [false],
+    porcentaje_iva:       [16, [Validators.min(0), Validators.max(100)]],
+    numero_guia:          [''],
+    notas:                [''],
   });
 
   private readonly _clientes = toSignal(
@@ -414,6 +452,8 @@ export class NuevoPedidoComponent implements OnInit {
           this.clienteSeleccionado.set(c);
           this.paso1.patchValue({ cliente_id: c.id });
           this.buscarClienteCtrl.setValue(c.razon_social as any, { emitEvent: false });
+          // Run blocking check for pre-selected client
+          this.seleccionarCliente(c);
         });
       }
     });
@@ -423,6 +463,25 @@ export class NuevoPedidoComponent implements OnInit {
     this.clienteSeleccionado.set(c);
     this.paso1.patchValue({ cliente_id: c.id });
     this.buscarClienteCtrl.setValue(c.razon_social, { emitEvent: false });
+    this.clienteBloqueado.set(false);
+
+    this.svc.verificarBloqueoCliente(c.id).subscribe(resultado => {
+      if (resultado.bloqueado) {
+        this.clienteBloqueado.set(true);
+        this.dialog.open(BloqueoClienteDialogComponent, {
+          width: '480px',
+          maxWidth: '95vw',
+          disableClose: true,
+          data: {
+            clienteNombre: c.razon_social,
+            diasSinAbono: resultado.diasSinAbono,
+            pedidosPendientes: resultado.pedidosPendientes,
+          },
+        }).afterClosed().subscribe(() => {
+          // Dialog closes on dismiss; bloqueo remains set
+        });
+      }
+    });
   }
 
   displayCliente(c: any): string { return c?.razon_social ?? ''; }
@@ -472,6 +531,11 @@ export class NuevoPedidoComponent implements OnInit {
   readonly subtotalBruto = computed(() => this.items().reduce((s, i) => s + this.subtotalItem(i), 0));
   readonly montoDescuento = computed(() => this.subtotalBruto() * (this.paso1.get('descuento_porcentaje')?.value ?? 0) / 100);
   readonly totalUsd = computed(() => this.subtotalBruto() - this.montoDescuento());
+  readonly montoIva = computed(() => {
+    if (!this.paso1.get('tiene_iva')?.value) return 0;
+    return this.totalUsd() * (this.paso1.get('porcentaje_iva')?.value ?? 16) / 100;
+  });
+  readonly totalConIva = computed(() => this.totalUsd() + this.montoIva());
 
   confirmar(): void {
     if (!this.items().length) return;
@@ -480,22 +544,32 @@ export class NuevoPedidoComponent implements OnInit {
     const v = this.paso1.getRawValue();
     const tasa = this.bcv.tasaActual()?.promedio;
     const total = this.totalUsd();
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    const facturaFiscal = v.tiene_factura_fiscal && v.numero_factura ? {
+      numero_factura:         v.numero_factura,
+      tiene_iva:              v.tiene_iva,
+      porcentaje_iva:         v.porcentaje_iva,
+      monto_base_usd:         total,
+      monto_iva_usd:          this.montoIva(),
+      monto_total_factura_usd: this.totalConIva(),
+      status_pago:            'pendiente' as const,
+      tipo_pago:              v.tipo_pago_factura || undefined,
+      fecha_emision:          hoy,
+    } : undefined;
 
     this.svc.crearPedido({
-      cliente_id:          v.cliente_id,
-      vendedor_id:         this.auth.usuarioActual()?.id ?? '',
-      status:              this.accionSeleccionada(),
-      tiene_factura:       v.tiene_factura,
-      numero_factura:      v.numero_factura || undefined,
-      tipo_pago_factura:   v.tipo_pago_factura || undefined,
-      numero_guia:         v.numero_guia || undefined,
+      cliente_id:           v.cliente_id,
+      vendedor_id:          this.auth.usuarioActual()?.id ?? '',
+      status:               this.accionSeleccionada(),
+      numero_guia:          v.numero_guia || undefined,
       descuento_porcentaje: v.descuento_porcentaje,
-      fecha_vencimiento:   v.fecha_vencimiento || undefined,
-      notas:               v.notas || undefined,
-      total_usd:           total,
-      total_bs:            tasa ? total * tasa : undefined,
-      tasa_bcv:            tasa,
-      factura_pagada:      false,
+      fecha_vencimiento:    v.fecha_vencimiento || undefined,
+      notas:                v.notas || undefined,
+      total_usd:            total,
+      total_bs:             tasa ? total * tasa : undefined,
+      tasa_bcv:             tasa,
+      factura_fiscal:       facturaFiscal,
     }).subscribe(pedido => {
       // Registrar los items en el mock
       this.svc.agregarItemsPedido(

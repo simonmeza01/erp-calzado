@@ -32,8 +32,8 @@ export const routes: Routes = [
         data: { roles: ['admin', 'gerente'] },
       },
       {
-        path: 'cuentas-por-vencer',
-        loadComponent: () => import('./pages/cuentas-por-vencer/cuentas-por-vencer.component').then(m => m.CuentasPorVencerComponent),
+        path: 'cuentas-por-pagar',
+        loadComponent: () => import('./pages/cuentas-por-pagar/cuentas-por-pagar.component').then(m => m.CuentasPorPagarComponent),
         canActivate: [roleGuard],
         data: { roles: ['admin', 'gerente'] },
       },
@@ -81,7 +81,13 @@ export const routes: Routes = [
       },
       {
         path: 'comisiones',
-        loadComponent: () => import('./pages/comisiones/comisiones.component').then(m => m.ComisionesComponent),
+        loadComponent: () => import('./pages/comisiones/comisiones-shell.component').then(m => m.ComisionesShellComponent),
+      },
+      {
+        path: 'costos',
+        loadComponent: () => import('./pages/costos/costos.component').then(m => m.CostosComponent),
+        canActivate: [roleGuard],
+        data: { roles: ['admin', 'gerente'] },
       },
       {
         path: 'mapa',

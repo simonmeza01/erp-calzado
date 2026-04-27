@@ -1,26 +1,25 @@
 import { Component, inject, signal, computed } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { SlicePipe } from '@angular/common';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatRadioModule } from '@angular/material/radio';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MockDataService } from '../../core/services/mock-data.service';
 import { AuthMockService } from '../../core/services/auth-mock.service';
 import { TasaBcvService } from '../../core/services/tasa-bcv.service';
 import { Pago } from '../../core/models';
-
-const BANCOS = ['BDV', 'Banesco', 'Mercantil', 'Provincial', 'Bicentenario', 'BNC'];
 
 @Component({
   selector: 'app-nuevo-pago',
   template: `
     <div class="max-w-lg mx-auto space-y-5">
 
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div data-tour="pagos-form" class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 class="text-base font-semibold text-slate-800 mb-5">Registrar pago</h3>
 
         <form (ngSubmit)="registrar()" #f="ngForm" class="space-y-4">
@@ -84,12 +83,25 @@ const BANCOS = ['BDV', 'Banesco', 'Mercantil', 'Provincial', 'Bicentenario', 'BN
             }
           }
 
-          <!-- Banco -->
+          <!-- Cuenta bancaria -->
           <mat-form-field appearance="outline" class="w-full">
-            <mat-label>Banco destino</mat-label>
-            <mat-select [(ngModel)]="form.banco_destino" name="banco">
-              @for (b of bancos; track b) {
-                <mat-option [value]="b">{{ b }}</mat-option>
+            <mat-label>Cuenta bancaria destino</mat-label>
+            <mat-select [(ngModel)]="form.cuenta_bancaria_id" name="cuenta">
+              <!-- Juridicas -->
+              @for (cb of cuentasJuridicas(); track cb.id) {
+                <mat-option [value]="cb.id">
+                  <span class="text-xs text-blue-600 font-semibold mr-1">[Empresa]</span>
+                  {{ cb.banco }} — {{ cb.titular }}
+                  @if (cb.numero_cuenta) { <span class="text-slate-400 text-xs ml-1">{{ cb.numero_cuenta | slice:0:12 }}…</span> }
+                </mat-option>
+              }
+              <!-- Personales -->
+              @for (cb of cuentasPersonales(); track cb.id) {
+                <mat-option [value]="cb.id">
+                  <span class="text-xs text-purple-600 font-semibold mr-1">[Personal]</span>
+                  {{ cb.banco }} — {{ cb.titular }}
+                  @if (cb.numero_cuenta) { <span class="text-slate-400 text-xs ml-1">{{ cb.numero_cuenta | slice:0:12 }}…</span> }
+                </mat-option>
               }
             </mat-select>
           </mat-form-field>
@@ -117,7 +129,7 @@ const BANCOS = ['BDV', 'Banesco', 'Mercantil', 'Provincial', 'Bicentenario', 'BN
     </div>
   `,
   imports: [
-    FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule,
+    FormsModule, SlicePipe, MatFormFieldModule, MatInputModule, MatSelectModule,
     MatButtonModule, MatIconModule, MatRadioModule, MatSnackBarModule,
   ],
 })
@@ -126,7 +138,6 @@ export class NuevoPagoComponent {
   private readonly auth = inject(AuthMockService);
   readonly bcv          = inject(TasaBcvService);
 
-  readonly bancos   = BANCOS;
   readonly guardando = signal(false);
   readonly exito     = signal(false);
 
@@ -135,6 +146,10 @@ export class NuevoPagoComponent {
     moneda: 'usd',
     tasa_cambio: this.bcv.tasaActual()?.promedio,
   };
+
+  private readonly cuentasTodas = toSignal(this.svc.getCuentasBancarias(), { initialValue: [] });
+  readonly cuentasJuridicas  = computed(() => this.cuentasTodas().filter(c => c.activo && c.tipo === 'juridica'));
+  readonly cuentasPersonales = computed(() => this.cuentasTodas().filter(c => c.activo && c.tipo === 'personal'));
 
   readonly pedidosTodos = toSignal(
     this.svc.getPedidos(

@@ -10,7 +10,7 @@ import { TasaBcvService } from '../../core/services/tasa-bcv.service';
     <div class="max-w-2xl space-y-4">
 
       <!-- Info empresa -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div data-tour="configuracion-empresa" class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 class="font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <mat-icon>business</mat-icon> Empresa
         </h3>
@@ -31,7 +31,7 @@ import { TasaBcvService } from '../../core/services/tasa-bcv.service';
       </div>
 
       <!-- Tasa BCV -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div data-tour="configuracion-bcv" class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 class="font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <mat-icon>currency_exchange</mat-icon> Tasa BCV
         </h3>
@@ -50,7 +50,7 @@ import { TasaBcvService } from '../../core/services/tasa-bcv.service';
       </div>
 
       <!-- Sesión -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div data-tour="configuracion-usuario" class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 class="font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <mat-icon>person</mat-icon> Usuario en sesión
         </h3>

@@ -13,8 +13,10 @@ const NAV_ALL: NavItem[] = [
   { icon: 'payments',         label: 'Registrar Pago',     path: '/pagos/nuevo',        roles: ['vendedor', 'admin', 'gerente'] },
   { icon: 'inventory_2',      label: 'Inventario',         path: '/inventario' },
   { icon: 'percent',          label: 'Mis Comisiones',     path: '/comisiones',         roles: ['vendedor'] },
+  { icon: 'manage_accounts',  label: 'Comisiones',         path: '/comisiones',         roles: ['admin', 'gerente'] },
+  { icon: 'calculate',        label: 'Costos y Utilidad',  path: '/costos',             roles: ['admin', 'gerente'] },
   { icon: 'assignment_return',label: 'Devoluciones',       path: '/devoluciones',       roles: ['admin', 'gerente'] },
-  { icon: 'event_busy',       label: 'Cuentas por Vencer', path: '/cuentas-por-vencer', roles: ['admin', 'gerente'] },
+  { icon: 'event_busy',       label: 'Cuentas por Pagar',  path: '/cuentas-por-pagar',  roles: ['admin', 'gerente'] },
   { icon: 'factory',          label: 'Fabricación',        path: '/fabricacion',        roles: ['admin'] },
   { icon: 'shopping_cart',    label: 'Compras',            path: '/compras',            roles: ['admin'] },
   { icon: 'settings',         label: 'Configuración',      path: '/configuracion',      roles: ['admin'] },
@@ -27,16 +29,18 @@ const NAV_ALL: NavItem[] = [
     <aside class="flex flex-col w-64 bg-primary text-white h-screen fixed top-0 left-0 z-30 shadow-lg">
 
       <!-- Logo + BCV -->
-      <div class="px-5 pt-6 pb-4 border-b border-primary-700">
+      <div data-tour="sidebar-logo" class="px-5 pt-6 pb-4 border-b border-primary-700">
         <div class="flex items-center gap-2 mb-3">
           <span class="text-accent text-2xl">👢</span>
           <h1 class="text-xl font-bold tracking-tight">BootERP</h1>
         </div>
-        <app-tasa-bcv-chip />
+        <span data-tour="sidebar-bcv">
+          <app-tasa-bcv-chip />
+        </span>
       </div>
 
       <!-- Navegación -->
-      <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+      <nav data-tour="sidebar-nav" class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
         @for (item of navItems(); track item.path) {
           <a [routerLink]="item.path"
              routerLinkActive="nav-link-active"
@@ -49,7 +53,7 @@ const NAV_ALL: NavItem[] = [
       </nav>
 
       <!-- Avatar usuario -->
-      <div class="px-4 py-4 border-t border-primary-700 flex items-center gap-3">
+      <div data-tour="sidebar-user" class="px-4 py-4 border-t border-primary-700 flex items-center gap-3">
         <div class="w-9 h-9 rounded-full bg-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
           {{ auth.iniciales() }}
         </div>

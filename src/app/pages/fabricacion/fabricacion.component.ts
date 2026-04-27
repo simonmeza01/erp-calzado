@@ -1,4 +1,4 @@
-import { Component, inject, computed, signal } from '@angular/core';
+import { Component, inject, computed } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -12,8 +12,8 @@ import { RouterLink } from '@angular/router';
 import { MockDataService } from '../../core/services/mock-data.service';
 import { AuthMockService } from '../../core/services/auth-mock.service';
 import { LoadingSkeletonComponent } from '../../shared/components/loading-skeleton/loading-skeleton.component';
-import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { CrearLoteDialogComponent } from './crear-lote-dialog.component';
+import { CompletarLoteDialogComponent, CompletarLoteDialogResult } from './completar-lote-dialog.component';
 import { LoteFabricacion } from '../../core/models';
 
 const STATUS_CFG = {
@@ -22,9 +22,6 @@ const STATUS_CFG = {
   completado:   { label: 'Completado',   classes: 'bg-emerald-100 text-emerald-700' },
 };
 
-// Producto_id por defecto para asociar lote al completar (primero activo)
-const PRODUCTO_DEFAULT = 'p1';
-
 @Component({
   selector: 'app-fabricacion',
   template: `
@@ -32,7 +29,7 @@ const PRODUCTO_DEFAULT = 'p1';
 
       <!-- Card alerta stock de seguridad -->
       @if (productosEnRiesgo().length) {
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <div data-tour="fabricacion-alerta" class="bg-amber-50 border border-amber-200 rounded-xl p-4">
           <div class="flex items-center gap-2 mb-2">
             <mat-icon class="text-amber-600">warning_amber</mat-icon>
             <p class="font-semibold text-amber-800">{{ productosEnRiesgo().length }} producto(s) bajo stock mínimo</p>
@@ -55,14 +52,14 @@ const PRODUCTO_DEFAULT = 'p1';
           <p class="text-xs text-slate-500">{{ lotes().length }} lotes registrados</p>
         </div>
         @if (auth.esAdmin()) {
-          <button mat-flat-button color="primary" (click)="abrirCrearLote()">
+          <button data-tour="fabricacion-nuevo" mat-flat-button color="primary" (click)="abrirCrearLote()">
             <mat-icon>add</mat-icon> Nuevo lote
           </button>
         }
       </div>
 
       <!-- Lista de lotes -->
-      <div class="space-y-3">
+      <div data-tour="fabricacion-lotes" class="space-y-3">
         @if (!lotes().length) {
           <app-loading-skeleton [count]="3" class="block" />
         } @else {
@@ -79,6 +76,13 @@ const PRODUCTO_DEFAULT = 'p1';
                       {{ cfg(l.status).label }}
                     </span>
                   </div>
+
+                  @if (l.producto_id) {
+                    <p class="text-xs text-slate-500">
+                      <mat-icon class="!text-xs align-middle">inventory_2</mat-icon>
+                      {{ productoNombre(l.producto_id) }}
+                    </p>
+                  }
 
                   @if (l.fecha_inicio) {
                     <p class="text-xs text-slate-400">
@@ -119,19 +123,7 @@ const PRODUCTO_DEFAULT = 'p1';
                   }
 
                   @if (l.status === 'en_proceso') {
-                    <!-- Input cantidad producida -->
-                    <div class="flex items-center gap-2">
-                      <mat-form-field appearance="outline" class="!w-36">
-                        <mat-label>Producidas</mat-label>
-                        <input matInput type="number" min="0" [max]="l.cantidad_planificada"
-                               [value]="cantidadProducidaInput[l.id] ?? l.cantidad_producida"
-                               (change)="setCantidad(l.id, $event)" />
-                      </mat-form-field>
-                      <button mat-stroked-button (click)="actualizarCantidad(l)">
-                        <mat-icon>update</mat-icon> Actualizar
-                      </button>
-                    </div>
-                    <button mat-flat-button color="accent" class="!bg-emerald-500" (click)="completarLote(l)">
+                    <button mat-flat-button color="accent" class="!bg-emerald-500" (click)="abrirCompletarLote(l)">
                       <mat-icon>check_circle</mat-icon> Completar lote
                     </button>
                   }
@@ -163,14 +155,11 @@ export class FabricacionComponent {
     this.productos().filter(p => p.stock_actual > 0 && p.stock_actual <= p.stock_minimo)
   );
 
-  // Track valores del input de cantidad producida por lote
-  cantidadProducidaInput: Record<string, number | undefined> = {};
-
   cfg(s: string) { return STATUS_CFG[s as keyof typeof STATUS_CFG] ?? STATUS_CFG.planificado; }
 
-  setCantidad(loteId: string, event: Event) {
-    const val = parseInt((event.target as HTMLInputElement).value, 10);
-    if (!isNaN(val)) this.cantidadProducidaInput[loteId] = val;
+  productoNombre(productoId: string): string {
+    const p = this.productos().find(x => x.id === productoId);
+    return p ? `${p.sku} — ${p.nombre}` : productoId;
   }
 
   abrirCrearLote() {
@@ -191,27 +180,15 @@ export class FabricacionComponent {
     });
   }
 
-  actualizarCantidad(lote: LoteFabricacion) {
-    const cantidad = this.cantidadProducidaInput[lote.id] ?? lote.cantidad_producida;
-    this.svc.actualizarLote(lote.id, { cantidad_producida: cantidad }).subscribe({
-      next: () => this.snack.open(`Cantidad actualizada: ${cantidad} unidades`, 'OK', { duration: 3000 }),
-      error: () => this.snack.open('Error al actualizar', 'Cerrar', { duration: 3000 }),
+  abrirCompletarLote(lote: LoteFabricacion) {
+    const ref = this.dialog.open(CompletarLoteDialogComponent, {
+      width: '520px',
+      data: { lote },
     });
-  }
-
-  completarLote(lote: LoteFabricacion) {
-    const cantidad = this.cantidadProducidaInput[lote.id] ?? lote.cantidad_producida;
-    const ref = this.dialog.open(ConfirmDialogComponent, {
-      data: {
-        titulo: '¿Completar lote?',
-        mensaje: `Se registrarán ${cantidad} unidades al inventario del producto asociado a este lote.`,
-        confirmar: 'Completar',
-      },
-    });
-    ref.afterClosed().subscribe((ok) => {
-      if (!ok) return;
-      this.svc.completarLote(lote.id, cantidad, PRODUCTO_DEFAULT).subscribe({
-        next: () => this.snack.open(`Lote completado. +${cantidad} unidades al inventario.`, 'OK', { duration: 4000 }),
+    ref.afterClosed().subscribe((result: CompletarLoteDialogResult | null) => {
+      if (!result) return;
+      this.svc.completarLote(lote.id, result.cantidadProducida, result.productoId).subscribe({
+        next: () => this.snack.open(`Lote completado. +${result.cantidadProducida} unidades al inventario.`, 'OK', { duration: 4000 }),
         error: () => this.snack.open('Error al completar lote', 'Cerrar', { duration: 3000 }),
       });
     });

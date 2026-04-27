@@ -1,18 +1,18 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { MockDataService } from '../../core/services/mock-data.service';
 import { AuthMockService } from '../../core/services/auth-mock.service';
 import { Cliente } from '../../core/models';
+import { ESTADOS_LIST, getCiudadesPorEstado } from '../../core/data/venezuela-geo';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 export interface ClienteFormData {
-  cliente?: Cliente;  // si existe → modo edición
+  cliente?: Cliente;
 }
 
 function rifValidator(c: AbstractControl): ValidationErrors | null {
@@ -28,6 +28,13 @@ function rifValidator(c: AbstractControl): ValidationErrors | null {
 
     <mat-dialog-content class="!pt-2">
       <form [formGroup]="form" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0">
+
+        @if (esEdicion && data.cliente?.codigo_cliente) {
+          <div class="sm:col-span-2 mb-2 px-1">
+            <span class="text-xs text-slate-400">Código cliente: </span>
+            <span class="text-xs font-mono font-semibold text-primary">{{ data.cliente!.codigo_cliente }}</span>
+          </div>
+        }
 
         <!-- Razón social -->
         <mat-form-field appearance="outline" class="sm:col-span-2">
@@ -56,21 +63,36 @@ function rifValidator(c: AbstractControl): ValidationErrors | null {
           <input matInput formControlName="telefono" placeholder="0412-1234567" />
         </mat-form-field>
 
+        <!-- Estado -->
+        <mat-form-field appearance="outline">
+          <mat-label>Estado *</mat-label>
+          <mat-select formControlName="estado">
+            @for (e of estados; track e) {
+              <mat-option [value]="e">{{ e }}</mat-option>
+            }
+          </mat-select>
+          @if (form.get('estado')?.hasError('required') && form.get('estado')?.touched) {
+            <mat-error>Seleccione un estado</mat-error>
+          }
+        </mat-form-field>
+
+        <!-- Ciudad -->
+        <mat-form-field appearance="outline">
+          <mat-label>Ciudad *</mat-label>
+          <mat-select formControlName="ciudad" [disabled]="!ciudadesDisponibles().length">
+            @for (c of ciudadesDisponibles(); track c) {
+              <mat-option [value]="c">{{ c }}</mat-option>
+            }
+          </mat-select>
+          @if (form.get('ciudad')?.hasError('required') && form.get('ciudad')?.touched) {
+            <mat-error>Seleccione una ciudad</mat-error>
+          }
+        </mat-form-field>
+
         <!-- Dirección -->
         <mat-form-field appearance="outline" class="sm:col-span-2">
           <mat-label>Dirección</mat-label>
           <textarea matInput formControlName="direccion" rows="2" placeholder="Av. Principal..."></textarea>
-        </mat-form-field>
-
-        <!-- Zona -->
-        <mat-form-field appearance="outline">
-          <mat-label>Zona</mat-label>
-          <mat-select formControlName="zona_id">
-            <mat-option value="">Sin zona</mat-option>
-            @for (z of zonas(); track z.id) {
-              <mat-option [value]="z.id">{{ z.nombre }}</mat-option>
-            }
-          </mat-select>
         </mat-form-field>
 
         <!-- Vendedor (solo admin/gerente) -->
@@ -111,7 +133,7 @@ function rifValidator(c: AbstractControl): ValidationErrors | null {
   `,
   imports: [
     ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule,
-    MatSelectModule, MatButtonModule, MatSlideToggleModule,
+    MatSelectModule, MatButtonModule,
   ],
 })
 export class ClienteFormDialogComponent implements OnInit {
@@ -120,38 +142,60 @@ export class ClienteFormDialogComponent implements OnInit {
   private readonly ref    = inject(MatDialogRef<ClienteFormDialogComponent>);
   readonly data           = inject<ClienteFormData>(MAT_DIALOG_DATA);
 
-  readonly zonas     = toSignal(this.svc.getZonas(), { initialValue: [] });
-  readonly vendedores = toSignal(this.svc.getVendedores(), { initialValue: [] });
-  readonly guardando  = signal(false);
+  readonly vendedores  = toSignal(this.svc.getVendedores(), { initialValue: [] });
+  readonly guardando   = signal(false);
 
   readonly esEdicion = !!this.data?.cliente;
+
+  readonly estados = ESTADOS_LIST;
+  readonly ciudadesDisponibles = signal<string[]>([]);
 
   readonly form = inject(FormBuilder).nonNullable.group({
     razon_social:       ['', Validators.required],
     rif:                ['', [Validators.required, rifValidator]],
     telefono:           [''],
+    estado:             ['', Validators.required],
+    ciudad:             ['', Validators.required],
     direccion:          [''],
-    zona_id:            [''],
     vendedor_id:        ['', this.auth.hasRole('admin', 'gerente') ? Validators.required : []],
     limite_credito_usd: [0, Validators.min(0)],
   });
 
+  constructor() {
+    effect(() => {
+      const estadoVal = this.form.get('estado')?.value ?? '';
+      const ciudades = getCiudadesPorEstado(estadoVal);
+      this.ciudadesDisponibles.set(ciudades);
+      const ciudadActual = this.form.get('ciudad')?.value ?? '';
+      if (ciudadActual && !ciudades.includes(ciudadActual)) {
+        this.form.patchValue({ ciudad: '' });
+      }
+    });
+  }
+
   ngOnInit(): void {
     const c = this.data?.cliente;
     if (c) {
+      this.ciudadesDisponibles.set(getCiudadesPorEstado(c.estado));
       this.form.patchValue({
         razon_social:       c.razon_social,
         rif:                c.rif,
         telefono:           c.telefono ?? '',
+        estado:             c.estado,
+        ciudad:             c.ciudad,
         direccion:          c.direccion ?? '',
-        zona_id:            c.zona_id ?? '',
         vendedor_id:        c.vendedor_id,
         limite_credito_usd: c.limite_credito_usd,
       });
     } else if (!this.auth.hasRole('admin', 'gerente')) {
-      // Auto-asignar vendedor actual
       this.form.patchValue({ vendedor_id: this.auth.usuarioActual()?.id ?? '' });
     }
+
+    this.form.get('estado')?.valueChanges.subscribe(estado => {
+      const ciudades = getCiudadesPorEstado(estado);
+      this.ciudadesDisponibles.set(ciudades);
+      this.form.patchValue({ ciudad: '' });
+    });
   }
 
   guardar(): void {

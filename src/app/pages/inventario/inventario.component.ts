@@ -22,7 +22,7 @@ import { AjusteStockDialogComponent } from './ajuste-stock-dialog.component';
     <div class="space-y-4">
 
       <!-- Resumen alertas -->
-      <div class="grid grid-cols-3 gap-4">
+      <div data-tour="inventario-alertas" class="grid grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-center">
           <p class="text-2xl font-bold text-slate-800">{{ productos().length }}</p>
           <p class="text-xs text-slate-500 mt-1">Total SKUs</p>
@@ -40,7 +40,7 @@ import { AjusteStockDialogComponent } from './ajuste-stock-dialog.component';
       </div>
 
       <!-- Filtros y controles -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+      <div data-tour="inventario-filtros" class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div class="flex gap-3 flex-wrap items-center">
           <mat-form-field appearance="outline" class="flex-1 min-w-40">
             <mat-label>Buscar producto…</mat-label>
@@ -98,12 +98,13 @@ import { AjusteStockDialogComponent } from './ajuste-stock-dialog.component';
             </button>
           }
 
-          <a routerLink="/inventario/movimientos" mat-stroked-button class="self-center">
+          <a data-tour="inventario-movimientos-link" routerLink="/inventario/movimientos" mat-stroked-button class="self-center">
             <mat-icon>history</mat-icon> Movimientos
           </a>
         </div>
       </div>
 
+      <div data-tour="inventario-productos">
       @if (!productos().length) {
         <app-loading-skeleton [count]="8" class="block" />
       } @else if (!filtrados().length) {
@@ -201,6 +202,7 @@ import { AjusteStockDialogComponent } from './ajuste-stock-dialog.component';
           </table>
         </div>
       }
+      </div>
     </div>
   `,
   imports: [

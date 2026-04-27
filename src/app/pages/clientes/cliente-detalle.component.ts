@@ -1,19 +1,17 @@
 import { Component, inject, Input, computed, OnInit, signal } from '@angular/core';
-import { RouterLink, Router } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { MockDataService } from '../../core/services/mock-data.service';
 import { AuthMockService } from '../../core/services/auth-mock.service';
 import { TasaBcvService } from '../../core/services/tasa-bcv.service';
 import { EstadoPedidoBadgeComponent } from '../../shared/components/estado-pedido-badge/estado-pedido-badge.component';
 import { AlertaVencimientoComponent } from '../../shared/components/alerta-vencimiento/alerta-vencimiento.component';
 import { LoadingSkeletonComponent } from '../../shared/components/loading-skeleton/loading-skeleton.component';
-import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
 import { ClienteFormDialogComponent } from './cliente-form-dialog.component';
 import { MiniMapaClienteComponent } from '../../shared/components/mini-mapa/mini-mapa-cliente.component';
 
@@ -28,6 +26,9 @@ import { MiniMapaClienteComponent } from '../../shared/components/mini-mapa/mini
         <!-- Header -->
         <div class="flex items-start justify-between gap-4">
           <div>
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="text-xs font-mono text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded">{{ c.codigo_cliente }}</span>
+            </div>
             <h2 class="text-xl font-bold text-slate-800">{{ c.razon_social }}</h2>
             <p class="text-slate-500 font-mono text-sm mt-0.5">{{ c.rif }}</p>
           </div>
@@ -67,21 +68,17 @@ import { MiniMapaClienteComponent } from '../../shared/components/mini-mapa/mini
                 }
                 <div class="flex gap-2">
                   <mat-icon class="!text-sm text-slate-400 flex-shrink-0 mt-0.5">map</mat-icon>
-                  <span class="text-slate-600">Zona {{ c.zona?.nombre ?? 'Sin zona' }}</span>
+                  <span class="text-slate-600">{{ c.estado }}, {{ c.ciudad }}</span>
                 </div>
                 <div class="flex gap-2">
                   <mat-icon class="!text-sm text-slate-400 flex-shrink-0 mt-0.5">person</mat-icon>
                   <span class="text-slate-600">{{ c.vendedor?.nombre ?? 'Sin vendedor' }}</span>
                 </div>
                 <div class="flex gap-2 items-center">
-                  <mat-icon class="!text-sm text-slate-400 flex-shrink-0">event</mat-icon>
-                  <span class="text-slate-500">Última visita: {{ c.ultima_visita | timeAgo }}</span>
+                  <mat-icon class="!text-sm text-slate-400 flex-shrink-0">calendar_today</mat-icon>
+                  <span class="text-slate-500">Cliente desde {{ c.created_at | date:'dd/MM/yyyy' }}</span>
                 </div>
               </dl>
-              <button mat-stroked-button class="w-full mt-4 !text-sm" (click)="registrarVisita()">
-                <mat-icon class="!text-base mr-1">today</mat-icon>
-                Registrar visita hoy
-              </button>
             </div>
 
             <!-- Mini mapa -->
@@ -117,11 +114,19 @@ import { MiniMapaClienteComponent } from '../../shared/components/mini-mapa/mini
                 </div>
                 <div class="py-2 border-b border-slate-100">
                   <div class="flex justify-between items-start">
-                    <span class="text-xs text-slate-500 uppercase font-semibold">Saldo pendiente</span>
+                    <span class="text-xs text-slate-500 uppercase font-semibold">Deuda total</span>
+                    @if ((c.conteo_pedidos_pendientes ?? 0) > 0) {
+                      <span class="text-xs text-slate-400">{{ c.conteo_pedidos_pendientes }} pedido(s)</span>
+                    }
                   </div>
-                  <p class="text-2xl font-bold text-red-600 mt-1">{{ bcv.formatUsd(c.saldo_pendiente_usd ?? 0) }}</p>
+                  <p class="text-2xl font-bold text-red-600 mt-1">{{ bcv.formatUsd(c.monto_total_adeudado ?? 0) }}</p>
                   @if (bcv.tasaActual()) {
-                    <p class="text-sm text-slate-400">{{ bcv.formatBs(c.saldo_pendiente_usd ?? 0) }}</p>
+                    <p class="text-sm text-slate-400">{{ bcv.formatBs(c.monto_total_adeudado ?? 0) }}</p>
+                  }
+                  @if ((c.rango_maximo_dias_mora ?? 0) > 0) {
+                    <p class="text-xs mt-1 font-semibold {{ (c.rango_maximo_dias_mora ?? 0) > 30 ? 'text-red-600' : 'text-amber-600' }}">
+                      Mora máxima: {{ c.rango_maximo_dias_mora }} días
+                    </p>
                   }
                 </div>
                 <div class="flex justify-between items-center py-2">
@@ -185,7 +190,15 @@ import { MiniMapaClienteComponent } from '../../shared/components/mini-mapa/mini
                             {{ p.moneda === 'usd' ? 'attach_money' : 'currency_exchange' }}
                           </mat-icon>
                           <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium text-slate-700">{{ p.banco_destino ?? 'Sin banco' }}</p>
+                            <p class="text-sm font-medium text-slate-700">
+                              {{ p.cuenta_bancaria?.banco ?? 'Sin banco' }}
+                              @if (p.cuenta_bancaria?.tipo) {
+                                <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full
+                                             {{ p.cuenta_bancaria!.tipo === 'juridica' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700' }}">
+                                  {{ p.cuenta_bancaria!.tipo === 'juridica' ? 'Empresa' : 'Personal' }}
+                                </span>
+                              }
+                            </p>
                             <p class="text-xs text-slate-400">{{ p.fecha_pago | date:'dd/MM/yyyy' }} · {{ p.tipo === 'completo' ? 'Pago completo' : 'Abono' }}</p>
                           </div>
                           <div class="text-right">
@@ -240,15 +253,13 @@ import { MiniMapaClienteComponent } from '../../shared/components/mini-mapa/mini
     RouterLink, DatePipe, DecimalPipe,
     MatIconModule, MatButtonModule, MatTabsModule,
     EstadoPedidoBadgeComponent, AlertaVencimientoComponent,
-    LoadingSkeletonComponent, TimeAgoPipe, MiniMapaClienteComponent,
+    LoadingSkeletonComponent, MiniMapaClienteComponent,
   ],
 })
 export class ClienteDetalleComponent implements OnInit {
   @Input() id = '';
 
   private readonly svc    = inject(MockDataService);
-  private readonly auth   = inject(AuthMockService);
-  private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly snack  = inject(MatSnackBar);
   readonly bcv            = inject(TasaBcvService);
@@ -258,7 +269,6 @@ export class ClienteDetalleComponent implements OnInit {
 
   private _emptyCliente() { return {} as NonNullable<ReturnType<typeof Object.assign>>; }
 
-  // Pedidos del cliente
   private readonly _pedidosSignal = signal<any[]>([]);
   readonly pedidos  = computed(() => this._pedidosSignal());
 
@@ -283,7 +293,7 @@ export class ClienteDetalleComponent implements OnInit {
 
   readonly creditoDisponible = computed(() => {
     const c = this.cliente() as any;
-    return (c?.limite_credito_usd ?? 0) - (c?.saldo_pendiente_usd ?? 0);
+    return (c?.limite_credito_usd ?? 0) - (c?.monto_total_adeudado ?? 0);
   });
 
   ngOnInit(): void {
@@ -294,7 +304,6 @@ export class ClienteDetalleComponent implements OnInit {
 
     this.svc.getPedidos(undefined, undefined, this.id).subscribe(ps => {
       this._pedidosSignal.set(ps);
-      // Extraer pagos de los pedidos
       const todosLosPagos = ps.flatMap((p: any) => p.pagos ?? []);
       this._pagosSignal.set(todosLosPagos);
     });
@@ -315,14 +324,6 @@ export class ClienteDetalleComponent implements OnInit {
         this.svc.getCliente(this.id).subscribe(c => this.cliente.set(c as any));
         this.snack.open('Cliente actualizado', 'OK', { duration: 3000 });
       }
-    });
-  }
-
-  registrarVisita(): void {
-    const hoy = new Date().toISOString();
-    this.svc.actualizarCliente(this.id, { ultima_visita: hoy }).subscribe(c => {
-      this.cliente.set(c as any);
-      this.snack.open('Visita registrada', 'OK', { duration: 2500 });
     });
   }
 }

@@ -41,13 +41,13 @@ const ESTADOS: { value: PedidoStatus | ''; label: string }[] = [
         <h2 class="text-base font-semibold text-slate-700">
           {{ filtrados().length }} pedido(s) — {{ bcv.formatUsd(totalMonto()) }}
         </h2>
-        <a mat-flat-button routerLink="/pedidos/nuevo" class="!bg-primary !text-white !rounded-lg">
+        <a data-tour="pedidos-nuevo" mat-flat-button routerLink="/pedidos/nuevo" class="!bg-primary !text-white !rounded-lg">
           <mat-icon class="!text-base mr-1">add</mat-icon>Nuevo pedido
         </a>
       </div>
 
       <!-- Filtros -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+      <div data-tour="pedidos-filtros" class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div class="flex flex-wrap gap-3">
           <mat-form-field appearance="outline" class="flex-1 min-w-48">
             <mat-label>Buscar por N° o cliente…</mat-label>
@@ -97,7 +97,7 @@ const ESTADOS: { value: PedidoStatus | ''; label: string }[] = [
       </div>
 
       <!-- Lista -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div data-tour="pedidos-lista" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         @if (!pedidosTodos().length) {
           <app-loading-skeleton [count]="6" class="p-5 block" />
         } @else if (!filtrados().length) {
@@ -250,9 +250,13 @@ export class PedidosComponent {
     });
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
-      this.svc.actualizarPedido(id, { status: 'aprobado' }).subscribe(() => {
-        this.snack.open('Pedido aprobado', 'OK', { duration: 3000 });
-      });
+      try {
+        this.svc.cambiarStatusPedido(id, 'aprobado', this.auth.usuarioActual()!.rol).subscribe(() => {
+          this.snack.open('Pedido aprobado', 'OK', { duration: 3000 });
+        });
+      } catch (e: any) {
+        this.snack.open(e.message ?? 'Error al aprobar', 'OK', { duration: 4000 });
+      }
     });
   }
 
@@ -262,9 +266,13 @@ export class PedidosComponent {
     });
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
-      this.svc.actualizarPedido(id, { status: 'cancelado' }).subscribe(() => {
-        this.snack.open('Pedido cancelado', 'OK', { duration: 3000 });
-      });
+      try {
+        this.svc.cambiarStatusPedido(id, 'cancelado', this.auth.usuarioActual()!.rol).subscribe(() => {
+          this.snack.open('Pedido cancelado', 'OK', { duration: 3000 });
+        });
+      } catch (e: any) {
+        this.snack.open(e.message ?? 'Error al cancelar', 'OK', { duration: 4000 });
+      }
     });
   }
 }

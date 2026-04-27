@@ -6,9 +6,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatBadgeModule } from '@angular/material/badge';
+import { MatDividerModule } from '@angular/material/divider';
 import { AuthMockService } from '../../core/services/auth-mock.service';
 import { TasaBcvChipComponent } from '../../shared/components/tasa-bcv-chip/tasa-bcv-chip.component';
 import { MockDataService } from '../../core/services/mock-data.service';
+import { TutorialService } from '../../core/services/tutorial.service';
 import { toSignal as tsignal } from '@angular/core/rxjs-interop';
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -17,9 +19,10 @@ const ROUTE_LABELS: Record<string, string> = {
   '/pedidos':             'Pedidos',
   '/pagos/nuevo':         'Registrar Pago',
   '/inventario':          'Inventario',
-  '/comisiones':          'Mis Comisiones',
+  '/comisiones':          'Comisiones',
+  '/costos':              'Costos y Utilidad',
   '/devoluciones':        'Devoluciones',
-  '/cuentas-por-vencer':  'Cuentas por Vencer',
+  '/cuentas-por-pagar':   'Cuentas por Pagar',
   '/fabricacion':         'Fabricación',
   '/compras':             'Compras',
   '/configuracion':       'Configuración',
@@ -31,7 +34,7 @@ const ROUTE_LABELS: Record<string, string> = {
     <header class="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center justify-between gap-4">
 
       <!-- Título de página -->
-      <h2 class="text-base font-semibold text-slate-800 truncate">{{ paginaTitulo() }}</h2>
+      <h2 data-tour="header-title" class="text-base font-semibold text-slate-800 truncate">{{ paginaTitulo() }}</h2>
 
       <!-- Controles derecha -->
       <div class="flex items-center gap-2 flex-shrink-0">
@@ -43,6 +46,7 @@ const ROUTE_LABELS: Record<string, string> = {
 
         <!-- Notificaciones -->
         <button mat-icon-button
+                data-tour="header-notifications"
                 [matBadge]="notifCount()"
                 [matBadgeHidden]="!notifCount()"
                 matBadgeColor="warn"
@@ -51,8 +55,33 @@ const ROUTE_LABELS: Record<string, string> = {
           <mat-icon>notifications_outlined</mat-icon>
         </button>
 
+        <!-- Botón de ayuda / tutorial -->
+        <button mat-icon-button
+                data-tour="header-help"
+                [matMenuTriggerFor]="helpMenu"
+                aria-label="Ayuda y tutoriales"
+                class="text-slate-500 hover:text-primary">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+        <mat-menu #helpMenu="matMenu">
+          <button mat-menu-item (click)="iniciarTourModulo()">
+            <mat-icon>play_circle_outline</mat-icon>
+            <span>Tutorial de esta página</span>
+          </button>
+          <button mat-menu-item (click)="iniciarTourGlobal()">
+            <mat-icon>explore</mat-icon>
+            <span>Tour general del sistema</span>
+          </button>
+          <mat-divider />
+          <button mat-menu-item (click)="reiniciarTodos()">
+            <mat-icon>refresh</mat-icon>
+            <span>Reiniciar todos los tutoriales</span>
+          </button>
+        </mat-menu>
+
         <!-- Avatar + menú -->
         <button class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white"
+                data-tour="header-user-menu"
                 [matMenuTriggerFor]="userMenu"
                 aria-label="Menú usuario">
           {{ auth.iniciales() }}
@@ -71,12 +100,16 @@ const ROUTE_LABELS: Record<string, string> = {
       </div>
     </header>
   `,
-  imports: [MatIconModule, MatButtonModule, MatMenuModule, MatBadgeModule, TasaBcvChipComponent],
+  imports: [
+    MatIconModule, MatButtonModule, MatMenuModule, MatBadgeModule, MatDividerModule,
+    TasaBcvChipComponent,
+  ],
 })
 export class HeaderComponent {
-  readonly auth   = inject(AuthMockService);
-  private readonly router  = inject(Router);
-  private readonly mockSvc = inject(MockDataService);
+  readonly auth       = inject(AuthMockService);
+  private readonly router      = inject(Router);
+  private readonly mockSvc     = inject(MockDataService);
+  private readonly tutorialSvc = inject(TutorialService);
 
   readonly paginaTitulo = toSignal(
     this.router.events.pipe(
@@ -87,7 +120,6 @@ export class HeaderComponent {
     { initialValue: 'BootERP' },
   );
 
-  // Cuenta alertas: pedidos próximos a vencer + stock bajo
   readonly notifCount = tsignal(
     this.mockSvc.getPedidos().pipe(
       map(pedidos => pedidos.filter(p =>
@@ -97,6 +129,18 @@ export class HeaderComponent {
     ),
     { initialValue: 0 },
   );
+
+  iniciarTourModulo(): void {
+    this.tutorialSvc.startCurrentModuleTour(true);
+  }
+
+  iniciarTourGlobal(): void {
+    this.tutorialSvc.startGlobalTour(true);
+  }
+
+  reiniciarTodos(): void {
+    this.tutorialSvc.resetAllTours();
+  }
 
   logout(): void {
     this.auth.logout();

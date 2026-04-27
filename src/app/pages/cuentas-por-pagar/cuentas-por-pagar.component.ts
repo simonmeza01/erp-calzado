@@ -15,23 +15,23 @@ import { AlertaVencimientoComponent } from '../../shared/components/alerta-venci
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 
 @Component({
-  selector: 'app-cuentas-por-vencer',
+  selector: 'app-cuentas-por-pagar',
   template: `
     <div class="space-y-4">
 
       <!-- Header + export -->
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 class="text-lg font-bold text-slate-800">Cuentas por vencer</h2>
+          <h2 class="text-lg font-bold text-slate-800">Cuentas por pagar</h2>
           <p class="text-xs text-slate-500">{{ pendientes().length }} pedidos con saldo pendiente</p>
         </div>
-        <button mat-stroked-button (click)="exportarCsv()" [disabled]="!pendientes().length">
+        <button data-tour="cuentas-exportar" mat-stroked-button (click)="exportarCsv()" [disabled]="!pendientes().length">
           <mat-icon>download</mat-icon> Exportar CSV
         </button>
       </div>
 
       <!-- Resumen por urgencia -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div data-tour="cuentas-urgencia" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         @for (g of grupos(); track g.label) {
           <div class="bg-white rounded-xl border {{ g.borderColor }} shadow-sm p-4 cursor-pointer transition-all
                       {{ filtroDias() === g.key ? 'ring-2 ring-offset-1 ' + g.ring : '' }}"
@@ -62,11 +62,11 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="min-w-36">
-          <mat-label>Zona</mat-label>
-          <mat-select [(ngModel)]="filtroZona">
-            <mat-option value="">Todas</mat-option>
-            @for (z of zonasDisponibles(); track z) {
-              <mat-option [value]="z">{{ z }}</mat-option>
+          <mat-label>Estado</mat-label>
+          <mat-select [(ngModel)]="filtroEstado">
+            <mat-option value="">Todos</mat-option>
+            @for (e of estadosDisponibles(); track e) {
+              <mat-option [value]="e">{{ e }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -79,7 +79,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
       </div>
 
       <!-- Tabla -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div data-tour="cuentas-tabla" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
           <mat-icon class="text-red-500">event_busy</mat-icon>
           <h3 class="font-semibold text-slate-800">Pedidos pendientes de cobro</h3>
@@ -97,7 +97,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
                 <th class="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Pedido</th>
                 <th class="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Cliente</th>
                 <th class="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Vendedor</th>
-                <th class="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase hidden xl:table-cell">Zona</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase hidden xl:table-cell">Estado</th>
                 <th class="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Vencimiento</th>
                 <th class="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Total</th>
                 <th class="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Saldo</th>
@@ -118,7 +118,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
                     <p class="text-xs text-slate-400">{{ p.cliente?.rif }}</p>
                   </td>
                   <td class="px-5 py-3 text-slate-600 text-sm hidden lg:table-cell">{{ p.vendedor?.nombre ?? '—' }}</td>
-                  <td class="px-5 py-3 text-slate-500 text-xs hidden xl:table-cell">{{ p.cliente?.zona?.nombre ?? '—' }}</td>
+                  <td class="px-5 py-3 text-slate-500 text-xs hidden xl:table-cell">{{ p.cliente?.estado ?? '—' }}</td>
                   <td class="px-5 py-3 text-center">
                     @if (p.fecha_vencimiento) {
                       <p class="text-xs text-slate-500 mb-1">{{ p.fecha_vencimiento | date:'dd/MM/yyyy' }}</p>
@@ -163,7 +163,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
     EstadoPedidoBadgeComponent, AlertaVencimientoComponent, EmptyStateComponent,
   ],
 })
-export class CuentasPorVencerComponent {
+export class CuentasPorPagarComponent {
   private readonly svc = inject(MockDataService);
   readonly bcv         = inject(TasaBcvService);
   private readonly snack = inject(MatSnackBar);
@@ -172,7 +172,7 @@ export class CuentasPorVencerComponent {
 
   busqueda       = '';
   filtroVendedor = '';
-  filtroZona     = '';
+  filtroEstado   = '';
   filtroDias     = signal('');
   recordatoriosEnviados = signal(new Set<string>());
 
@@ -189,23 +189,23 @@ export class CuentasPorVencerComponent {
       .map(p => ({ id: p.vendedor_id, nombre: p.vendedor?.nombre ?? p.vendedor_id }));
   });
 
-  readonly zonasDisponibles = computed(() =>
-    [...new Set(this.pendientes().map(p => p.cliente?.zona?.nombre).filter(Boolean))] as string[]
+  readonly estadosDisponibles = computed(() =>
+    [...new Set(this.pendientes().map(p => p.cliente?.estado).filter(Boolean))] as string[]
   );
 
   readonly filtrosActivos = computed(() =>
-    !!this.busqueda || !!this.filtroVendedor || !!this.filtroZona || !!this.filtroDias()
+    !!this.busqueda || !!this.filtroVendedor || !!this.filtroEstado || !!this.filtroDias()
   );
 
   readonly filtrados = computed(() => {
     const q = this.busqueda.toLowerCase().trim();
-    const vend = this.filtroVendedor;
-    const zona = this.filtroZona;
-    const dias = this.filtroDias();
+    const vend   = this.filtroVendedor;
+    const estado = this.filtroEstado;
+    const dias   = this.filtroDias();
 
     return this.pendientes().filter(p => {
-      if (vend && p.vendedor_id !== vend) return false;
-      if (zona && p.cliente?.zona?.nombre !== zona) return false;
+      if (vend   && p.vendedor_id !== vend) return false;
+      if (estado && p.cliente?.estado !== estado) return false;
       if (dias) {
         const d = p.dias_para_vencer ?? 999;
         if (dias === 'vencidos' && d >= 0) return false;
@@ -247,7 +247,7 @@ export class CuentasPorVencerComponent {
   limpiarFiltros() {
     this.busqueda = '';
     this.filtroVendedor = '';
-    this.filtroZona = '';
+    this.filtroEstado = '';
     this.filtroDias.set('');
   }
 
@@ -267,12 +267,12 @@ export class CuentasPorVencerComponent {
     const rows = this.filtrados();
     if (!rows.length) return;
 
-    const headers = ['Pedido', 'Cliente', 'RIF', 'Zona', 'Vendedor', 'Estado', 'Fecha vencimiento', 'Días para vencer', 'Total USD', 'Saldo USD'];
+    const headers = ['Pedido', 'Cliente', 'RIF', 'Estado', 'Vendedor', 'Status', 'Fecha vencimiento', 'Días para vencer', 'Total USD', 'Saldo USD'];
     const data = rows.map(p => [
       p.numero_pedido,
       p.cliente?.razon_social ?? '',
       p.cliente?.rif ?? '',
-      p.cliente?.zona?.nombre ?? '',
+      p.cliente?.estado ?? '',
       p.vendedor?.nombre ?? '',
       p.status,
       p.fecha_vencimiento ?? '',
@@ -290,7 +290,7 @@ export class CuentasPorVencerComponent {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cuentas-por-vencer-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `cuentas-por-pagar-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 

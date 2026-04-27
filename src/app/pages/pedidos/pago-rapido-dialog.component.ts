@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -6,6 +6,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatRadioModule } from '@angular/material/radio';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MockDataService } from '../../core/services/mock-data.service';
 import { AuthMockService } from '../../core/services/auth-mock.service';
 import { TasaBcvService } from '../../core/services/tasa-bcv.service';
@@ -17,8 +18,6 @@ export interface PagoDialogData {
   clienteNombre: string;
   saldoPendienteUsd: number;
 }
-
-const BANCOS = ['BDV', 'Banesco', 'Mercantil', 'Provincial', 'BNC', 'Bicentenario', 'Venezolano de Crédito', 'Otro'];
 
 @Component({
   selector: 'app-pago-rapido-dialog',
@@ -86,12 +85,23 @@ const BANCOS = ['BDV', 'Banesco', 'Mercantil', 'Provincial', 'BNC', 'Bicentenari
           }
         }
 
-        <!-- Banco -->
+        <!-- Cuenta bancaria -->
         <mat-form-field appearance="outline" class="w-full">
-          <mat-label>Banco destino</mat-label>
-          <mat-select formControlName="banco_destino">
-            @for (b of bancos; track b) {
-              <mat-option [value]="b">{{ b }}</mat-option>
+          <mat-label>Cuenta bancaria destino *</mat-label>
+          <mat-select formControlName="cuenta_bancaria_id">
+            <!-- Juridicas (Empresa) -->
+            @for (cb of cuentasJuridicas(); track cb.id) {
+              <mat-option [value]="cb.id">
+                <span class="text-xs text-blue-600 font-semibold">[Empresa]</span>
+                {{ cb.banco }} — {{ cb.titular }}
+              </mat-option>
+            }
+            <!-- Personales -->
+            @for (cb of cuentasPersonales(); track cb.id) {
+              <mat-option [value]="cb.id">
+                <span class="text-xs text-purple-600 font-semibold">[Personal]</span>
+                {{ cb.banco }} — {{ cb.titular }}
+              </mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -137,18 +147,21 @@ export class PagoRapidoDialogComponent {
   readonly data         = inject<PagoDialogData>(MAT_DIALOG_DATA);
   private readonly ref  = inject(MatDialogRef<PagoRapidoDialogComponent>);
 
-  readonly bancos   = BANCOS;
   readonly guardando = signal(false);
 
+  private readonly cuentasTodas = toSignal(this.svc.getCuentasBancarias(), { initialValue: [] });
+  readonly cuentasJuridicas  = computed(() => this.cuentasTodas().filter(c => c.activo && c.tipo === 'juridica'));
+  readonly cuentasPersonales = computed(() => this.cuentasTodas().filter(c => c.activo && c.tipo === 'personal'));
+
   readonly form = inject(FormBuilder).nonNullable.group({
-    tipo:          ['abono'],
-    moneda:        ['usd'],
-    fecha_pago:    [new Date().toISOString().slice(0, 10), Validators.required],
-    monto_usd:     [this.data.saldoPendienteUsd],
-    monto_bs:      [0],
-    tasa_cambio:   [this.bcv.tasaActual()?.promedio ?? 41.5],
-    banco_destino: ['', Validators.required],
-    notas:         [''],
+    tipo:               ['abono'],
+    moneda:             ['usd'],
+    fecha_pago:         [new Date().toISOString().slice(0, 10), Validators.required],
+    monto_usd:          [this.data.saldoPendienteUsd],
+    monto_bs:           [0],
+    tasa_cambio:        [this.bcv.tasaActual()?.promedio ?? 41.5],
+    cuenta_bancaria_id: ['', Validators.required],
+    notas:              [''],
   });
 
   readonly montoUsdPreview = () => {
@@ -164,16 +177,16 @@ export class PagoRapidoDialogComponent {
     this.guardando.set(true);
     const v = this.form.getRawValue();
     this.svc.registrarPago({
-      pedido_id:    this.data.pedidoId,
-      vendedor_id:  this.auth.usuarioActual()?.id ?? '',
-      tipo:         v.tipo as PagoTipo,
-      moneda:       v.moneda as PagoMoneda,
-      fecha_pago:   v.fecha_pago,
-      banco_destino: v.banco_destino,
-      notas:        v.notas || undefined,
-      monto_usd:   v.moneda === 'usd' ? v.monto_usd : undefined,
-      monto_bs:    v.moneda === 'bs' ? v.monto_bs : undefined,
-      tasa_cambio: v.moneda === 'bs' ? v.tasa_cambio : undefined,
+      pedido_id:          this.data.pedidoId,
+      vendedor_id:        this.auth.usuarioActual()?.id ?? '',
+      tipo:               v.tipo as PagoTipo,
+      moneda:             v.moneda as PagoMoneda,
+      fecha_pago:         v.fecha_pago,
+      cuenta_bancaria_id: v.cuenta_bancaria_id,
+      notas:              v.notas || undefined,
+      monto_usd:          v.moneda === 'usd' ? v.monto_usd : undefined,
+      monto_bs:           v.moneda === 'bs' ? v.monto_bs : undefined,
+      tasa_cambio:        v.moneda === 'bs' ? v.tasa_cambio : undefined,
     }).subscribe(pago => {
       this.guardando.set(false);
       this.ref.close(pago);

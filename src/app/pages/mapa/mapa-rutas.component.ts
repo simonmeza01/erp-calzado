@@ -9,34 +9,35 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs/operators';
-import { differenceInDays, parseISO, formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { differenceInDays, parseISO } from 'date-fns';
 import * as L from 'leaflet';
 import { MockDataService } from '../../core/services/mock-data.service';
 import { Cliente, Pedido, Usuario } from '../../core/models';
-import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
-const ZONA_COLORES: Record<string, string> = {
-  'Norte':  '#1E3A5F',
-  'Sur':    '#15803d',
-  'Este':   '#854d0e',
-  'Oeste':  '#9d174d',
-  'Centro': '#4b5563',
+const ESTADO_COLORES: Record<string, string> = {
+  'Distrito Capital': '#1E3A5F',
+  'Miranda':          '#15803d',
+  'Aragua':           '#854d0e',
+  'Carabobo':         '#9d174d',
+  'Zulia':            '#1d4ed8',
+  'Lara':             '#7c3aed',
+  'Bolívar':          '#b45309',
+  'Táchira':          '#0f766e',
+  'Mérida':           '#be185d',
+  'Anzoátegui':       '#065f46',
 };
 
 const FABRICA = { lat: 10.5050, lng: -66.8300 };
 
 const FILTROS = [
-  { label: 'Todos',           value: 'todos' },
-  { label: 'Con deuda',       value: 'condeuda' },
-  { label: 'Por vencer',      value: 'porvencer' },
-  { label: 'Sin visitar 7d',  value: 'sinvisitar7' },
-  { label: 'Sin visitar 14d', value: 'sinvisitar14' },
+  { label: 'Todos',      value: 'todos' },
+  { label: 'Con deuda',  value: 'condeuda' },
+  { label: 'Por vencer', value: 'porvencer' },
 ];
 
-type ModoVista  = 'pines' | 'ruta' | 'calor' | 'sinvisitar';
+type ModoVista  = 'pines' | 'ruta' | 'calor';
 type ClienteMap = Cliente & { _tieneAlerta?: boolean };
 
 interface RutaResumen {
@@ -55,7 +56,7 @@ interface RutaResumen {
 <div class="flex h-full overflow-hidden bg-slate-100">
 
   <!-- ── Panel izquierdo ────────────────────────────────────────────────── -->
-  <div class="w-[280px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden shadow-sm">
+  <div data-tour="mapa-panel" class="w-[280px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden shadow-sm">
 
     <!-- Selector de vendedor -->
     <div class="p-3 border-b border-slate-100">
@@ -105,19 +106,16 @@ interface RutaResumen {
             <!-- Número orden / color zona -->
             <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center
                         text-white text-[10px] font-bold mt-0.5"
-                 [style.background]="zonaColor(c.zona?.nombre)">
+                 [style.background]="estadoColor(c.estado)">
               {{ i + 1 }}
             </div>
             <div class="min-w-0 flex-1">
               <p class="text-xs font-semibold text-slate-800 truncate leading-tight">{{ c.razon_social }}</p>
               <p class="text-[10px] text-slate-400 mt-0.5">
-                {{ c.zona?.nombre ?? '—' }} ·
-                <span [class]="visitaClase(c.ultima_visita)">
-                  @if (c.ultima_visita) { {{ c.ultima_visita | timeAgo }} } @else { Sin visita }
-                </span>
+                {{ c.estado }}, {{ c.ciudad }}
               </p>
-              @if ((c.saldo_pendiente_usd ?? 0) > 0) {
-                <p class="text-[10px] font-semibold text-red-600 mt-0.5">{{ fUsd(c.saldo_pendiente_usd ?? 0) }} pendiente</p>
+              @if ((c.monto_total_adeudado ?? 0) > 0) {
+                <p class="text-[10px] font-semibold text-red-600 mt-0.5">{{ fUsd(c.monto_total_adeudado ?? 0) }} pendiente</p>
               } @else {
                 <p class="text-[10px] text-green-600 mt-0.5">Al día</p>
               }
@@ -133,7 +131,7 @@ interface RutaResumen {
     </div>
 
     <!-- Selector de modo de vista -->
-    <div class="p-3 border-t border-slate-100 flex-shrink-0">
+    <div data-tour="mapa-modos" class="p-3 border-t border-slate-100 flex-shrink-0">
       <p class="text-[10px] text-slate-400 mb-1.5 font-medium uppercase tracking-wide">Modo de vista</p>
       <mat-button-toggle-group [value]="modoVista()" (change)="cambiarModo($event.value)"
                                class="w-full" aria-label="Modo de vista">
@@ -146,12 +144,9 @@ interface RutaResumen {
         <mat-button-toggle value="calor"      class="flex-1">
           <mat-icon class="!text-sm !w-4 !h-4">monetization_on</mat-icon>
         </mat-button-toggle>
-        <mat-button-toggle value="sinvisitar" class="flex-1">
-          <mat-icon class="!text-sm !w-4 !h-4">event_busy</mat-icon>
-        </mat-button-toggle>
       </mat-button-toggle-group>
       <div class="flex justify-between text-[9px] text-slate-400 mt-1 px-1">
-        <span>Pines</span><span>Ruta</span><span>Deuda</span><span>Visitas</span>
+        <span>Pines</span><span>Ruta</span><span>Deuda</span>
       </div>
     </div>
 
@@ -161,13 +156,13 @@ interface RutaResumen {
   <div class="flex-1 relative">
     <div id="map-container" style="position:absolute;inset:0;"></div>
 
-    <!-- Leyenda de zonas -->
+    <!-- Leyenda de estados -->
     <div class="absolute bottom-6 left-3 z-[1000] bg-white/90 backdrop-blur-sm
-                rounded-lg shadow-md p-2.5 text-[10px] space-y-1">
-      @for (zona of zonas; track zona.nombre) {
+                rounded-lg shadow-md p-2.5 text-[10px] space-y-1 max-h-52 overflow-y-auto">
+      @for (e of estadosLeyenda; track e.nombre) {
         <div class="flex items-center gap-1.5">
-          <div class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="zona.color"></div>
-          <span class="text-slate-600">{{ zona.nombre }}</span>
+          <div class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="e.color"></div>
+          <span class="text-slate-600">{{ e.nombre }}</span>
         </div>
       }
       <div class="flex items-center gap-1.5 pt-0.5 border-t border-slate-100 mt-0.5">
@@ -182,7 +177,6 @@ interface RutaResumen {
   imports: [
     FormsModule,
     MatSelectModule, MatFormFieldModule, MatButtonToggleModule, MatIconModule,
-    TimeAgoPipe,
   ],
 })
 export class MapaRutasComponent implements OnDestroy {
@@ -200,8 +194,8 @@ export class MapaRutasComponent implements OnDestroy {
   readonly modoVista    = signal<ModoVista>('pines');
   readonly rutaData     = signal<RutaResumen | null>(null);
 
-  readonly filtros = FILTROS;
-  readonly zonas   = Object.entries(ZONA_COLORES).map(([nombre, color]) => ({ nombre, color }));
+  readonly filtros       = FILTROS;
+  readonly estadosLeyenda = Object.entries(ESTADO_COLORES).map(([nombre, color]) => ({ nombre, color }));
 
   // ── Datos reactivos ──────────────────────────────────────────────────────
   readonly vendedores = toSignal(this.mockData.getVendedores(), { initialValue: [] as Usuario[] });
@@ -233,17 +227,9 @@ export class MapaRutasComponent implements OnDestroy {
 
     switch (filtro) {
       case 'condeuda':
-        return enriched.filter(c => (c.saldo_pendiente_usd ?? 0) > 0);
+        return enriched.filter(c => (c.monto_total_adeudado ?? 0) > 0);
       case 'porvencer':
         return enriched.filter(c => c._tieneAlerta);
-      case 'sinvisitar7':
-        return enriched.filter(c =>
-          !c.ultima_visita || differenceInDays(hoy, parseISO(c.ultima_visita)) >= 7,
-        );
-      case 'sinvisitar14':
-        return enriched.filter(c =>
-          !c.ultima_visita || differenceInDays(hoy, parseISO(c.ultima_visita)) >= 14,
-        );
       default:
         return enriched;
     }
@@ -326,13 +312,10 @@ export class MapaRutasComponent implements OnDestroy {
       if (vendId !== 'all') {
         this.activarModoRuta(clientes, vendId);
       } else {
-        // No hay vendedor seleccionado: mostrar pines normales
         this.renderizarPines(clientes);
       }
     } else if (modo === 'calor') {
       this.activarModoCalorDeuda(clientes);
-    } else if (modo === 'sinvisitar') {
-      this.activarModoSinVisitar(clientes);
     } else {
       this.renderizarPines(clientes);
     }
@@ -345,7 +328,7 @@ export class MapaRutasComponent implements OnDestroy {
 
   private renderizarPines(clientes: ClienteMap[]): void {
     clientes.forEach((c, i) => {
-      const icon = this.createPin(ZONA_COLORES[c.zona?.nombre ?? ''] ?? '#4b5563', i + 1, !!c._tieneAlerta);
+      const icon = this.createPin(ESTADO_COLORES[c.estado ?? ''] ?? '#4b5563', i + 1, !!c._tieneAlerta);
       this.addClienteMarker(c, icon);
     });
   }
@@ -367,7 +350,7 @@ export class MapaRutasComponent implements OnDestroy {
       ruta.clientes.forEach((c, i) => {
         const enriquecido = clientesFiltrados.find(cl => cl.id === c.id) ?? c as ClienteMap;
         const icon = this.createPin(
-          ZONA_COLORES[c.zona?.nombre ?? ''] ?? '#4b5563',
+          ESTADO_COLORES[c.estado ?? ''] ?? '#4b5563',
           i + 1,
           !!enriquecido._tieneAlerta,
         );
@@ -378,12 +361,10 @@ export class MapaRutasComponent implements OnDestroy {
 
   private activarModoCalorDeuda(clientes: ClienteMap[]): void {
     clientes.forEach((c, i) => {
-      // Pin normal
-      const icon = this.createPin(ZONA_COLORES[c.zona?.nombre ?? ''] ?? '#4b5563', i + 1, !!c._tieneAlerta);
+      const icon = this.createPin(ESTADO_COLORES[c.estado ?? ''] ?? '#4b5563', i + 1, !!c._tieneAlerta);
       this.addClienteMarker(c, icon);
 
-      // Círculo proporcional a la deuda
-      const saldo = c.saldo_pendiente_usd ?? 0;
+      const saldo = c.monto_total_adeudado ?? 0;
       if (saldo > 0) {
         this.overlayLayer.addLayer(
           L.circle([c.coordenadas!.lat, c.coordenadas!.lng], {
@@ -395,19 +376,6 @@ export class MapaRutasComponent implements OnDestroy {
           }).bindTooltip(`$${saldo.toLocaleString('es-VE')}`, { permanent: false }),
         );
       }
-    });
-  }
-
-  private activarModoSinVisitar(clientes: ClienteMap[]): void {
-    const hoy = new Date();
-    clientes.forEach((c, i) => {
-      const dias        = c.ultima_visita ? differenceInDays(hoy, parseISO(c.ultima_visita)) : 999;
-      const sinVisitar  = dias >= 7;
-      const color       = sinVisitar ? '#6b7280' : (ZONA_COLORES[c.zona?.nombre ?? ''] ?? '#4b5563');
-      const label       = sinVisitar ? `${dias}d` : String(i + 1);
-      const alerta      = sinVisitar || !!c._tieneAlerta;
-      const icon = this.createPinLabel(color, label, alerta);
-      this.addClienteMarker(c, icon);
     });
   }
 
@@ -437,23 +405,20 @@ export class MapaRutasComponent implements OnDestroy {
   }
 
   private buildPopupHtml(c: ClienteMap): string {
-    const saldo      = c.saldo_pendiente_usd ?? 0;
+    const saldo      = c.monto_total_adeudado ?? 0;
     const saldoBg    = saldo > 0 ? '#FEF2F2' : '#F0FDF4';
     const saldoColor = saldo > 0 ? '#991B1B' : '#166534';
     const saldoTexto = saldo > 0 ? `$${saldo.toLocaleString('es-VE')} pendiente` : 'Al día';
-    const visita     = c.ultima_visita
-      ? formatDistanceToNow(parseISO(c.ultima_visita), { locale: es, addSuffix: true })
-      : 'Sin registro';
     return `
       <div style="font-family:sans-serif;min-width:200px;">
         <div style="font-weight:600;font-size:14px;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:6px;">
           ${c.razon_social}
         </div>
         <div style="font-size:12px;color:#666;margin-bottom:2px;">RIF: <strong style="color:#333">${c.rif}</strong></div>
-        <div style="font-size:12px;color:#666;margin-bottom:2px;">Zona: <strong style="color:#333">${c.zona?.nombre ?? '—'}</strong></div>
-        <div style="font-size:12px;color:#666;margin-bottom:2px;">Última visita: <strong style="color:#333">${visita}</strong></div>
+        <div style="font-size:12px;color:#666;margin-bottom:2px;">Estado: <strong style="color:#333">${c.estado ?? '—'}</strong></div>
+        <div style="font-size:12px;color:#666;margin-bottom:2px;">Ciudad: <strong style="color:#333">${c.ciudad ?? '—'}</strong></div>
         <div style="font-size:13px;margin-top:8px;padding:6px;background:${saldoBg};border-radius:6px;">
-          Saldo: <strong style="color:${saldoColor}">${saldoTexto}</strong>
+          Deuda: <strong style="color:${saldoColor}">${saldoTexto}</strong>
         </div>
         <div style="display:flex;gap:6px;margin-top:10px;">
           <a id="btn-ver-${c.id}" href="#" style="flex:1;text-align:center;padding:5px;background:#1E3A5F;
@@ -514,19 +479,11 @@ export class MapaRutasComponent implements OnDestroy {
     if (modo !== 'ruta') this.rutaData.set(null);
   }
 
-  zonaColor(zona?: string): string {
-    return ZONA_COLORES[zona ?? ''] ?? '#4b5563';
+  estadoColor(estado?: string): string {
+    return ESTADO_COLORES[estado ?? ''] ?? '#4b5563';
   }
 
   fUsd(n: number): string {
     return '$' + Math.round(n).toLocaleString('es-VE');
-  }
-
-  visitaClase(ultimaVisita?: string): string {
-    if (!ultimaVisita) return 'text-red-500';
-    const dias = differenceInDays(new Date(), parseISO(ultimaVisita));
-    if (dias >= 14) return 'text-red-500';
-    if (dias >= 7)  return 'text-amber-500';
-    return 'text-slate-400';
   }
 }
